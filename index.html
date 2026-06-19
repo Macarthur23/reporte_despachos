@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Maestro de Despacho - Promart Tarapoto</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        body { background-color: #f4f6f9; font-family: 'Segoe UI', sans-serif; height: 100vh; overflow: hidden; }
+
+        /* Contenedor Principal con Layout de Panel */
+        .wrapper { display: flex; width: 100%; height: 100vh; }
+
+        /* Barra Lateral Izquierda (Sidebar) */
+        .sidebar { width: 260px; background-color: #2b3e50; color: #fff; display: flex; flex-direction: column; transition: all 0.3s; flex-shrink: 0; }
+        .sidebar-header { padding: 20px; background-color: #1a252f; text-align: center; border-bottom: 1px solid #34495e; }
+        .sidebar-menu { list-style: none; padding: 0; margin: 0; flex-grow: 1; overflow-y: auto; }
+        .sidebar-menu li a { display: flex; align-items: center; padding: 13px 20px; color: #b8c7ce; text-decoration: none; border-left: 3px solid transparent; transition: 0.2s; font-size: 0.95rem; }
+        .sidebar-menu li a:hover, .sidebar-menu li.active a { color: #fff; background-color: #1e282c; border-left-color: #0d6efd; }
+        .sidebar-menu li a i { margin-right: 12px; font-size: 1.1rem; }
+        .sidebar-footer { padding: 15px; background-color: #1a252f; font-size: 0.85rem; text-align: center; color: #7f8c8d; }
+
+        /* Contenido Central Derecho */
+        .main-content { flex-grow: 1; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        .top-navbar { height: 60px; background-color: #fff; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; padding: 0 30px; justify-content: space-between; }
+        .content-body { padding: 30px; flex-grow: 1; overflow-y: auto; }
+
+        /* Diseños de Tablas y Tarjetas */
+        .card { border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border-radius: 10px; margin-bottom: 25px; }
+        .table-responsive-container { max-height: 400px; overflow-y: auto; border-radius: 8px; border: 1px solid #dee2e6; }
+        th { position: sticky; top: 0; background-color: #34495e !important; color: white; z-index: 5; }
+        .step-num { width: 28px; height: 28px; background: #0d6efd; color: white; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="wrapper">
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <h5 class="m-0 fw-bold text-white"><i class="bi bi-truck me-2"></i>Logística Despacho</h5>
+        </div>
+        <ul class="sidebar-menu">
+            <li class="active" id="menu-carga"><a href="#" onclick="cambiarSeccion('carga')"><i class="bi bi-cloud-upload"></i> Carga de Archivos</a></li>
+            <li id="menu-zonas"><a href="#" onclick="cambiarSeccion('zonas')"><i class="bi bi-geo-alt"></i> Consolidado Zonas</a></li>
+            <li id="menu-detalle"><a href="#" onclick="cambiarSeccion('detalle')"><i class="bi bi-list-check"></i> Detalle de Pedidos</a></li>
+
+            <li id="menu-manuales"><a href="#" onclick="cambiarSeccion('manuales')"><i class="bi bi-signpost-2"></i> Rutas Manuales</a></li>
+            <li id="menu-dld"><a href="#" onclick="cambiarSeccion('dld')"><i class="bi bi-shield-shaded"></i> Transporte DLD</a></li>
+            <li id="menu-charape"><a href="#" onclick="cambiarSeccion('charape')"><i class="bi bi-car-front-fill"></i> Transporte CHARAPE</a></li>
+
+            <hr class="mx-3 my-2" style="border-color: #34495e;">
+            <li><a href="#" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> Reiniciar Sistema</a></li>
+        </ul>
+        <div class="sidebar-footer">
+            <span>v2.5 - Promart Tarapoto</span>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <header class="top-navbar">
+            <h5 class="m-0 fw-bold text-secondary" id="page-title">Módulo de Carga</h5>
+            <div class="text-muted small fw-semibold"><i class="bi bi-calendar3 me-1"></i> Control de Reparto Domicilio</div>
+        </header>
+
+        <div class="content-body">
+
+            <section id="sec-carga">
+                <div class="card p-4">
+                    <h4 class="fw-bold text-dark mb-2">Panel de Control de Datos</h4>
+                    <p class="text-muted">Por favor, sube los reportes del día para realizar el cruce automático de cubicajes y órdenes de Nota de Venta (N/V).</p>
+                    <hr>
+                    <div class="row g-4 mt-1">
+                        <div class="col-md-6">
+                            <div class="p-4 border rounded bg-white shadow-sm">
+                                <span class="step-num">1</span><label class="form-label fw-bold text-secondary">Reporte de Despacho (Pesos/Volumen):</label>
+                                <input class="form-control mt-2" type="file" id="fileDespacho" accept=".xlsx, .xls, .csv">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="p-4 border rounded bg-white shadow-sm">
+                                <span class="step-num">2</span><label class="form-label fw-bold text-secondary">Reporte por SKU (Validación de Orden):</label>
+                                <input class="form-control mt-2" type="file" id="fileSku" accept=".xlsx, .xls, .csv">
+                            </div>
+                        </div>
+                        <div class="col-12 d-grid mt-4">
+                            <button class="btn btn-primary btn-lg fw-bold shadow" onclick="procesarYCruzar()">
+                                <i class="bi bi-gear-fill me-2"></i> Procesar y Cruzar Información
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="sec-zonas" style="display: none;">
+                <div class="card p-4">
+                    <h4 class="text-dark mb-3 fw-bold">📦 Resumen de Carga Total por Zona de Entrega</h4>
+                    <div class="table-responsive-container">
+                        <table class="table table-striped table-hover align-middle m-0">
+                            <thead>
+                            <tr>
+                                <th>Ruta / Zona de Entrega</th>
+                                <th class="text-center">Total Pedidos Únicos (N/V)</th>
+                                <th class="text-end">Peso Total (Kg)</th>
+                                <th class="text-end">Volumen Total (m³)</th>
+                            </tr>
+                            </thead>
+                            <tbody id="tablaRutas">
+                            <tr><td colspan="4" class="text-center text-muted py-4">Sube los archivos para generar el resumen.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="sec-detalle" style="display: none;">
+                <div class="card p-4">
+                    <h4 class="text-dark mb-3 fw-bold">📋 Desglose Detallado de Órdenes Cruzadas</h4>
+                    <div class="table-responsive-container">
+                        <table class="table table-bordered table-hover align-middle small bg-white m-0">
+                            <thead>
+                            <tr>
+                                <th>Código N/V</th>
+                                <th>SKU</th>
+                                <th>Cliente</th>
+                                <th>Distrito</th>
+                                <th>Dirección de Entrega</th>
+                                <th>Descripción Producto</th>
+                                <th class="text-center">Cant.</th>
+                                <th class="text-end">Peso (Kg)</th>
+                                <th class="text-end">Volumen (m³)</th>
+                            </tr>
+                            </thead>
+                            <tbody id="tablaDetalle">
+                            <tr><td colspan="9" class="text-center text-muted py-4">Sube los archivos para ver la lista de distribución.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="sec-manuales" style="display: none;">
+                <div class="card p-4">
+                    <h4 class="text-dark mb-2 fw-bold"><i class="bi bi-signpost-2 text-primary me-2"></i>Gestión de Rutas Manuales</h4>
+                    <p class="text-muted">Espacio reservado para la configuración manual de las rutas de despacho.</p>
+                    <div class="p-5 border rounded bg-light text-center text-secondary">
+                        <i class="bi bi-tools fs-1 mb-3 d-block text-muted"></i>
+                        Listo para añadir la lógica que me indiques.
+                    </div>
+                </div>
+            </section>
+
+            <section id="sec-dld" style="display: none;">
+                <div class="card p-4">
+                    <h4 class="text-dark mb-2 fw-bold"><i class="bi bi-shield-shaded text-success me-2"></i>Módulo de Transporte DLD</h4>
+                    <p class="text-muted">Espacio reservado para el control de asignación de carga de la empresa DLD.</p>
+                    <div class="p-5 border rounded bg-light text-center text-secondary">
+                        <i class="bi bi-tools fs-1 mb-3 d-block text-muted"></i>
+                        Listo para añadir la lógica que me indiques.
+                    </div>
+                </div>
+            </section>
+
+            <section id="sec-charape" style="display: none;">
+                <div class="card p-4">
+                    <h4 class="text-dark mb-2 fw-bold"><i class="bi bi-car-front-fill text-warning me-2"></i>Módulo de Transporte CHARAPE</h4>
+                    <p class="text-muted">Espacio reservado para el control de asignación de carga de la empresa CHARAPE.</p>
+                    <div class="p-5 border rounded bg-light text-center text-secondary">
+                        <i class="bi bi-tools fs-1 mb-3 d-block text-muted"></i>
+                        Listo para añadir la lógica que me indiques.
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+</div>
+
+<script>
+    let dataDespacho = null;
+    let dataSku = null;
+
+    function cambiarSeccion(seccion) {
+        // Ocultar todas las secciones creadas
+        document.getElementById('sec-carga').style.display = 'none';
+        document.getElementById('sec-zonas').style.display = 'none';
+        document.getElementById('sec-detalle').style.display = 'none';
+        document.getElementById('sec-manuales').style.display = 'none';
+        document.getElementById('sec-dld').style.display = 'none';
+        document.getElementById('sec-charape').style.display = 'none';
+
+        // Remover clases activas de la barra lateral
+        document.getElementById('menu-carga').classList.remove('active');
+        document.getElementById('menu-zonas').classList.remove('active');
+        document.getElementById('menu-detalle').classList.remove('active');
+        document.getElementById('menu-manuales').classList.remove('active');
+        document.getElementById('menu-dld').classList.remove('active');
+        document.getElementById('menu-charape').classList.remove('active');
+
+        // Activar sección seleccionada
+        if (seccion === 'carga') {
+            document.getElementById('sec-carga').style.display = 'block';
+            document.getElementById('menu-carga').classList.add('active');
+            document.getElementById('page-title').innerText = 'Módulo de Carga';
+        } else if (seccion === 'zonas') {
+            document.getElementById('sec-zonas').style.display = 'block';
+            document.getElementById('menu-zonas').classList.add('active');
+            document.getElementById('page-title').innerText = 'Consolidado Zonas';
+        } else if (seccion === 'detalle') {
+            document.getElementById('sec-detalle').style.display = 'block';
+            document.getElementById('menu-detalle').classList.add('active');
+            document.getElementById('page-title').innerText = 'Detalle de Pedidos';
+        } else if (seccion === 'manuales') {
+            document.getElementById('sec-manuales').style.display = 'block';
+            document.getElementById('menu-manuales').classList.add('active');
+            document.getElementById('page-title').innerText = 'Rutas Manuales';
+        } else if (seccion === 'dld') {
+            document.getElementById('sec-dld').style.display = 'block';
+            document.getElementById('menu-dld').classList.add('active');
+            document.getElementById('page-title').innerText = 'Transporte DLD';
+        } else if (seccion === 'charape') {
+            document.getElementById('sec-charape').style.display = 'block';
+            document.getElementById('menu-charape').classList.add('active');
+            document.getElementById('page-title').innerText = 'Transporte CHARAPE';
+        }
+    }
+
+    function limpiarNumero(valor) {
+        if (valor === undefined || valor === null || valor === '') return 0;
+        let num = parseFloat(String(valor).replace(/[^0-9.-]/g, ''));
+        return isNaN(num) ? 0 : num;
+    }
+
+    function leerArchivo(fileId, callback) {
+        const fileInput = document.getElementById(fileId);
+        if (!fileInput.files.length) {
+            callback(null);
+            return;
+        }
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            callback(XLSX.utils.sheet_to_json(worksheet));
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    function procesarYCruzar() {
+        leerArchivo('fileDespacho', function(resDespacho) {
+            dataDespacho = resDespacho;
+            leerArchivo('fileSku', function(resSku) {
+                dataSku = resSku;
+
+                if (!dataDespacho || !dataSku) {
+                    alert("Por favor, sube ambos archivos antes de hacer clic en procesar.");
+                    return;
+                }
+                ejecutarCruce();
+            });
+        });
+    }
+
+    function ejecutarCruce() {
+        const resumenRutas = {};
+        const detallePedidos = [];
+
+        dataDespacho.forEach(fila => {
+            const nv = String(fila['Código de N/V'] || '').trim();
+            const sku = String(fila['SKU'] || '').trim();
+            const zona = fila['Zona de entrega'] || fila['Ruta'] || 'Sin Zona';
+            const cliente = fila['Nombre de cliente'] || 'Cliente';
+            const distrito = fila['Distrito'] || 'No Especificado';
+            const direccion = fila['Dirección de entrega'] || 'Sin Dirección';
+            const producto = fila['Descripción'] || '';
+
+            const cantidad = limpiarNumero(fila['Cantidad total'] || fila['Cantidad']);
+            const pesoUnitario = limpiarNumero(fila['Peso de producto'] || fila['Peso']);
+            let volumenUnitario = limpiarNumero(fila['Volumen de producto'] || fila['Volumen']);
+
+            if (volumenUnitario === 0 && pesoUnitario > 0) {
+                volumenUnitario = pesoUnitario * 0.00125;
+            }
+
+            const pesoTotal = pesoUnitario * cantidad;
+            const volumenTotal = volumenUnitario * cantidad;
+
+            if (!resumenRutas[zona]) {
+                resumenRutas[zona] = { pedidos: new Set(), weight: 0, volume: 0 };
+            }
+            resumenRutas[zona].pedidos.add(nv);
+            resumenRutas[zona].weight += pesoTotal;
+            resumenRutas[zona].volume += volumenTotal;
+
+            detallePedidos.push({
+                nv: nv, sku: sku, cliente: cliente, distrito: distrito, direccion: direccion,
+                producto: producto, cantidad: cantidad, peso: pesoTotal,
+                volumen: volumenTotal
+            });
+        });
+
+        mostrarResultados(resumenRutas, detallePedidos);
+        cambiarSeccion('zonas');
+    }
+
+    function mostrarResultados(resumenRutas, detallePedidos) {
+        const tRutas = document.getElementById('tablaRutas');
+        tRutas.innerHTML = '';
+        for (const z in resumenRutas) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="fw-bold text-dark"><i class="bi bi-pin-map-fill text-danger me-2"></i>${z}</td>
+                <td class="text-center fw-bold text-primary">${resumenRutas[z].pedidos.size}</td>
+                <td class="text-end fw-bold text-success">${resumenRutas[z].weight.toFixed(2)} Kg</td>
+                <td class="text-end fw-bold text-info">${resumenRutas[z].volume.toFixed(4)} m³</td>
+            `;
+            tRutas.appendChild(tr);
+        }
+
+        const tDetalle = document.getElementById('tablaDetalle');
+        tDetalle.innerHTML = '';
+        detallePedidos.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="fw-bold text-primary">${p.nv}</td>
+                <td>${p.sku}</td>
+                <td>${p.cliente}</td>
+                <td class="fw-semibold text-secondary">${p.distrito}</td>
+                <td>${p.direccion}</td>
+                <td>${p.producto}</td>
+                <td class="text-center fw-bold">${p.cantidad}</td>
+                <td class="text-end">${p.peso.toFixed(2)}</td>
+                <td class="text-end text-info fw-bold">${p.volumen.toFixed(4)}</td>
+            `;
+            tDetalle.appendChild(tr);
+        });
+    }
+</script>
+</body>
+</html>
