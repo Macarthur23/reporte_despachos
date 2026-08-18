@@ -7,6 +7,9 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- Firebase (sincronización en tiempo real entre computadoras) -->
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-database-compat.js"></script>
     <style>
         body { background-color: #f4f6f9; font-family: 'Segoe UI', sans-serif; height: 100vh; overflow: hidden; }
 
@@ -29,9 +32,16 @@
 
         /* Diseños de Tablas y Tarjetas */
         .card { border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border-radius: 10px; margin-bottom: 25px; }
-        .table-responsive-container { max-height: 400px; overflow-y: auto; border-radius: 8px; border: 1px solid #dee2e6; }
-        th { position: sticky; top: 0; background-color: #34495e !important; color: white; z-index: 5; }
+        .table-responsive-container { max-height: 430px; overflow-y: auto; border-radius: 8px; border: 1px solid #dee2e6; }
+        th { position: sticky; top: 0; background-color: #34495e !important; color: white; z-index: 5; white-space: nowrap; font-size: 0.85rem; }
+        td { white-space: nowrap; font-size: 0.85rem; }
         .step-num { width: 28px; height: 28px; background: #0d6efd; color: white; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 10px; }
+
+        /* Estilos específicos para badges de estado y origen */
+        .badge-pendiente { background-color: #f1c40f; color: #000; }
+        .badge-cerrado { background-color: #2ecc71; color: #fff; }
+        .badge-origen-manual { background-color: #9b59b6; color: #fff; }
+        .badge-origen-excel { background-color: #3498db; color: #fff; }
     </style>
 </head>
 <body>
@@ -46,22 +56,25 @@
             <li id="menu-zonas"><a href="#" onclick="cambiarSeccion('zonas')"><i class="bi bi-geo-alt"></i> Consolidado Zonas</a></li>
             <li id="menu-detalle"><a href="#" onclick="cambiarSeccion('detalle')"><i class="bi bi-list-check"></i> Detalle de Pedidos</a></li>
 
-            <li id="menu-manuales"><a href="#" onclick="cambiarSeccion('manuales')"><i class="bi bi-signpost-2"></i> Rutas Manuales</a></li>
+            <li id="menu-manuales"><a href="#" onclick="cambiarSeccion('manuales')"><i class="bi bi-pencil-square"></i> Rutas Manuales</a></li>
             <li id="menu-dld"><a href="#" onclick="cambiarSeccion('dld')"><i class="bi bi-shield-shaded"></i> Transporte DLD</a></li>
             <li id="menu-charape"><a href="#" onclick="cambiarSeccion('charape')"><i class="bi bi-car-front-fill"></i> Transporte CHARAPE</a></li>
 
             <hr class="mx-3 my-2" style="border-color: #34495e;">
-            <li><a href="#" onclick="location.reload()"><i class="bi bi-arrow-clockwise"></i> Reiniciar Sistema</a></li>
+            <li><a href="#" onclick="resetSistema()"><i class="bi bi-arrow-clockwise"></i> Reiniciar Sistema</a></li>
         </ul>
         <div class="sidebar-footer">
-            <span>v2.5 - Promart Tarapoto</span>
+            <span>v2.8 - Promart Tarapoto</span>
         </div>
     </nav>
 
     <main class="main-content">
         <header class="top-navbar">
             <h5 class="m-0 fw-bold text-secondary" id="page-title">Módulo de Carga</h5>
-            <div class="text-muted small fw-semibold"><i class="bi bi-calendar3 me-1"></i> Control de Reparto Domicilio</div>
+            <div class="d-flex align-items-center gap-3">
+                <span id="estadoConexion" class="small fw-bold text-warning"><i class="bi bi-arrow-repeat me-1"></i>Conectando...</span>
+                <div class="text-muted small fw-semibold"><i class="bi bi-calendar3 me-1"></i> Control de Reparto Domicilio</div>
+            </div>
         </header>
 
         <div class="content-body">
@@ -121,19 +134,22 @@
                         <table class="table table-bordered table-hover align-middle small bg-white m-0">
                             <thead>
                             <tr>
+                                <th class="text-center text-white" style="background-color: #2c3e50 !important;">Asignar Transporte</th>
                                 <th>Código N/V</th>
                                 <th>SKU</th>
+                                <th>Descripción Producto</th>
+                                <th class="text-center">Cantidad</th>
                                 <th>Cliente</th>
                                 <th>Distrito</th>
-                                <th>Dirección de Entrega</th>
-                                <th>Descripción Producto</th>
-                                <th class="text-center">Cant.</th>
+                                <th>Referencia</th>
                                 <th class="text-end">Peso (Kg)</th>
                                 <th class="text-end">Volumen (m³)</th>
+                                <th class="text-center">Fecha Original</th>
+                                <th class="text-center">Fecha de Entrega</th>
                             </tr>
                             </thead>
                             <tbody id="tablaDetalle">
-                            <tr><td colspan="9" class="text-center text-muted py-4">Sube los archivos para ver la lista de distribución.</td></tr>
+                            <tr><td colspan="12" class="text-center text-muted py-4">Sube los archivos para ver la lista de distribución.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -141,34 +157,186 @@
             </section>
 
             <section id="sec-manuales" style="display: none;">
+                <div class="card p-4 mb-4">
+                    <h4 class="text-dark mb-3 fw-bold"><i class="bi bi-pencil-square text-primary me-2"></i>Ingreso de Órdenes Manuales</h4>
+                    <form id="formManual" onsubmit="agregarOrdenManual(event)">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold text-secondary">Fecha de Compra</label>
+                                <input type="date" class="form-control form-control-sm" id="mFechaCompra" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold text-secondary">Gestor SAC</label>
+                                <input type="text" class="form-control form-control-sm" id="mGestorSac" placeholder="Nombre del gestor" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold text-secondary">Nota de Venta (N/V)</label>
+                                <input type="text" class="form-control form-control-sm" id="mNotaVenta" placeholder="Número de N/V" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold text-secondary">Autorización</label>
+                                <input type="text" class="form-control form-control-sm" id="mAutorizacion" placeholder="Código/Autorización">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold text-secondary">Consultor</label>
+                                <input type="text" class="form-control form-control-sm" id="mConsultor" placeholder="Nombre del consultor">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold text-secondary">División</label>
+                                <input type="text" class="form-control form-control-sm" id="mDivision" placeholder="Ej. Acabados, Madera">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold text-secondary">Fecha de Despacho</label>
+                                <input type="date" class="form-control form-control-sm" id="mFechaDespacho" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold text-secondary">Motivo</label>
+                                <input type="text" class="form-control form-control-sm" id="mMotivo" placeholder="Motivo de ruta manual">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-secondary">Cliente</label>
+                                <input type="text" class="form-control form-control-sm" id="mCliente" placeholder="Nombre completo" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-secondary">DNI / CE / RUC</label>
+                                <input type="text" class="form-control form-control-sm" id="mDocumento" placeholder="Número identificador" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold text-secondary">Distrito</label>
+                                <input type="text" class="form-control form-control-sm" id="mDistrito" placeholder="Ej. Tarapoto, Morales" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-secondary">Dirección</label>
+                                <input type="text" class="form-control form-control-sm" id="mDireccion" placeholder="Calle, Jr, Av, Nro" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-secondary">Referencia</label>
+                                <input type="text" class="form-control form-control-sm" id="mReferencia" placeholder="Frente a, al costado de">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold text-secondary">Celular</label>
+                                <input type="tel" class="form-control form-control-sm" id="mCelular" placeholder="Número de contacto">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold text-secondary">Correo</label>
+                                <input type="email" class="form-control form-control-sm" id="mCorreo" placeholder="correo@ejemplo.com">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold text-secondary">Observación</label>
+                                <input type="text" class="form-control form-control-sm" id="mObservacion" placeholder="Detalles extra">
+                            </div>
+                        </div>
+                        <div class="mt-3 text-end">
+                            <button type="submit" class="btn btn-success fw-bold px-4 shadow-sm">
+                                <i class="bi bi-plus-circle me-1"></i> Guardar e Incluir en Cuadro
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
                 <div class="card p-4">
-                    <h4 class="text-dark mb-2 fw-bold"><i class="bi bi-signpost-2 text-primary me-2"></i>Gestión de Rutas Manuales</h4>
-                    <p class="text-muted">Espacio reservado para la configuración manual de las rutas de despacho.</p>
-                    <div class="p-5 border rounded bg-light text-center text-secondary">
-                        <i class="bi bi-tools fs-1 mb-3 d-block text-muted"></i>
-                        Listo para añadir la lógica que me indiques.
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="text-dark m-0 fw-bold"><i class="bi bi-table text-secondary me-2"></i>Cuadro Recopilador de Rutas Manuales (Pendientes)</h5>
+                        <button class="btn btn-outline-success btn-sm fw-bold" onclick="exportarManualesExcel()">
+                            <i class="bi bi-file-earmark-excel me-1"></i> Exportar Cuadro
+                        </button>
+                    </div>
+                    <div class="table-responsive-container">
+                        <table class="table table-bordered table-striped table-hover align-middle m-0 bg-white">
+                            <thead>
+                            <tr>
+                                <th class="text-center" style="background-color: #2c3e50 !important;">Asignación de Transporte</th>
+                                <th>Fecha Compra</th>
+                                <th>Gestor SAC</th>
+                                <th>N/V</th>
+                                <th>Autorización</th>
+                                <th>Consultor</th>
+                                <th>División</th>
+                                <th>Fecha Despacho</th>
+                                <th>Motivo</th>
+                                <th>Cliente</th>
+                                <th>DNI/CE/RUC</th>
+                                <th>Distrito</th>
+                                <th>Dirección</th>
+                                <th>Referencia</th>
+                                <th>Celular</th>
+                                <th>Correo</th>
+                                <th class="text-center">Estado</th>
+                                <th>Observación</th>
+                            </tr>
+                            </thead>
+                            <tbody id="tablaManualesRecopilado">
+                            <tr id="filaVaciaManual"><td colspan="18" class="text-center text-muted py-4">Ninguna información registrada todavía. Llena el formulario de arriba.</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
 
             <section id="sec-dld" style="display: none;">
                 <div class="card p-4">
-                    <h4 class="text-dark mb-2 fw-bold"><i class="bi bi-shield-shaded text-success me-2"></i>Módulo de Transporte DLD</h4>
-                    <p class="text-muted">Espacio reservado para el control de asignación de carga de la empresa DLD.</p>
-                    <div class="p-5 border rounded bg-light text-center text-secondary">
-                        <i class="bi bi-tools fs-1 mb-3 d-block text-muted"></i>
-                        Listo para añadir la lógica que me indiques.
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="text-dark m-0 fw-bold"><i class="bi bi-shield-shaded text-success me-2"></i>Órdenes Asignadas - Transporte DLD</h4>
+                        <button class="btn btn-outline-success btn-sm fw-bold" onclick="exportarTransporteExcel('DLD')">
+                            <i class="bi bi-file-earmark-excel me-1"></i> Exportar Manifiesto DLD
+                        </button>
+                    </div>
+                    <div class="table-responsive-container">
+                        <table class="table table-bordered table-striped table-hover align-middle m-0 bg-white">
+                            <thead>
+                            <tr>
+                                <th class="text-center" style="background-color: #c0392b !important;">Acción</th>
+                                <th class="text-center">Origen</th>
+                                <th>N/V</th>
+                                <th>SKU</th>
+                                <th>Descripción Producto</th>
+                                <th class="text-center">Cantidad</th>
+                                <th>Cliente</th>
+                                <th>Distrito</th>
+                                <th>Referencia</th>
+                                <th class="text-end">Peso Total</th>
+                                <th class="text-end">Volumen Total</th>
+                                <th>Fecha Despacho</th>
+                            </tr>
+                            </thead>
+                            <tbody id="tablaDLD">
+                            <tr id="filaVaciaDLD"><td colspan="12" class="text-center text-muted py-4">No se han asignado órdenes a este transporte.</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
 
             <section id="sec-charape" style="display: none;">
                 <div class="card p-4">
-                    <h4 class="text-dark mb-2 fw-bold"><i class="bi bi-car-front-fill text-warning me-2"></i>Módulo de Transporte CHARAPE</h4>
-                    <p class="text-muted">Espacio reservado para el control de asignación de carga de la empresa CHARAPE.</p>
-                    <div class="p-5 border rounded bg-light text-center text-secondary">
-                        <i class="bi bi-tools fs-1 mb-3 d-block text-muted"></i>
-                        Listo para añadir la lógica que me indiques.
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="text-dark m-0 fw-bold"><i class="bi bi-car-front-fill text-warning me-2"></i>Órdenes Asignadas - Transporte CHARAPE</h4>
+                        <button class="btn btn-outline-success btn-sm fw-bold" onclick="exportarTransporteExcel('CHARAPE')">
+                            <i class="bi bi-file-earmark-excel me-1"></i> Exportar Manifiesto CHARAPE
+                        </button>
+                    </div>
+                    <div class="table-responsive-container">
+                        <table class="table table-bordered table-striped table-hover align-middle m-0 bg-white">
+                            <thead>
+                            <tr>
+                                <th class="text-center" style="background-color: #c0392b !important;">Acción</th>
+                                <th class="text-center">Origen</th>
+                                <th>N/V</th>
+                                <th>SKU</th>
+                                <th>Descripción Producto</th>
+                                <th class="text-center">Cantidad</th>
+                                <th>Cliente</th>
+                                <th>Distrito</th>
+                                <th>Referencia</th>
+                                <th class="text-end">Peso Total</th>
+                                <th class="text-end">Volumen Total</th>
+                                <th>Fecha Despacho</th>
+                            </tr>
+                            </thead>
+                            <tbody id="tablaCHARAPE">
+                            <tr id="filaVaciaCharape"><td colspan="12" class="text-center text-muted py-4">No se han asignado órdenes a este transporte.</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
@@ -181,8 +349,11 @@
     let dataDespacho = null;
     let dataSku = null;
 
+    // Listas maestras para controlar la asignación de flujos
+    let listaManuales = [];
+    let listaPedidosExcel = [];
+
     function cambiarSeccion(seccion) {
-        // Ocultar todas las secciones creadas
         document.getElementById('sec-carga').style.display = 'none';
         document.getElementById('sec-zonas').style.display = 'none';
         document.getElementById('sec-detalle').style.display = 'none';
@@ -190,7 +361,6 @@
         document.getElementById('sec-dld').style.display = 'none';
         document.getElementById('sec-charape').style.display = 'none';
 
-        // Remover clases activas de la barra lateral
         document.getElementById('menu-carga').classList.remove('active');
         document.getElementById('menu-zonas').classList.remove('active');
         document.getElementById('menu-detalle').classList.remove('active');
@@ -198,7 +368,6 @@
         document.getElementById('menu-dld').classList.remove('active');
         document.getElementById('menu-charape').classList.remove('active');
 
-        // Activar sección seleccionada
         if (seccion === 'carga') {
             document.getElementById('sec-carga').style.display = 'block';
             document.getElementById('menu-carga').classList.add('active');
@@ -207,45 +376,417 @@
             document.getElementById('sec-zonas').style.display = 'block';
             document.getElementById('menu-zonas').classList.add('active');
             document.getElementById('page-title').innerText = 'Consolidado Zonas';
+            renderizarResumenZonas();
         } else if (seccion === 'detalle') {
             document.getElementById('sec-detalle').style.display = 'block';
             document.getElementById('menu-detalle').classList.add('active');
             document.getElementById('page-title').innerText = 'Detalle de Pedidos';
+            renderizarTablaDetalle();
         } else if (seccion === 'manuales') {
             document.getElementById('sec-manuales').style.display = 'block';
             document.getElementById('menu-manuales').classList.add('active');
             document.getElementById('page-title').innerText = 'Rutas Manuales';
+            renderizarTablasManuales();
         } else if (seccion === 'dld') {
             document.getElementById('sec-dld').style.display = 'block';
             document.getElementById('menu-dld').classList.add('active');
             document.getElementById('page-title').innerText = 'Transporte DLD';
+            renderizarTransporte('DLD', 'tablaDLD', 'filaVaciaDLD');
         } else if (seccion === 'charape') {
             document.getElementById('sec-charape').style.display = 'block';
             document.getElementById('menu-charape').classList.add('active');
             document.getElementById('page-title').innerText = 'Transporte CHARAPE';
+            renderizarTransporte('CHARAPE', 'tablaCHARAPE', 'filaVaciaCharape');
         }
     }
 
+    // INGRESO MANUAL DE ÓRDENES
+    function agregarOrdenManual(event) {
+        event.preventDefault();
+
+        const orden = {
+            id: 'M-' + Date.now(),
+            tipoOrigen: 'Manual',
+            transporte: 'Pendiente',
+            fechaCompra: document.getElementById('mFechaCompra').value,
+            gestorSac: document.getElementById('mGestorSac').value,
+            notaVenta: document.getElementById('mNotaVenta').value,
+            autorizacion: document.getElementById('mAutorizacion').value || '-',
+            consultor: document.getElementById('mConsultor').value || '-',
+            division: document.getElementById('mDivision').value || '-',
+            fechaDespacho: document.getElementById('mFechaDespacho').value,
+            motivo: document.getElementById('mMotivo').value || '-',
+            cliente: document.getElementById('mCliente').value,
+            documento: document.getElementById('mDocumento').value,
+            distrito: document.getElementById('mDistrito').value,
+            direccion: document.getElementById('mDireccion').value,
+            referencia: document.getElementById('mReferencia').value || '-',
+            celular: document.getElementById('mCelular').value || '-',
+            correo: document.getElementById('mCorreo').value || '-',
+            estado: 'Pendiente',
+            observacion: document.getElementById('mObservacion').value || '-',
+            peso: 0,
+            volumen: 0
+        };
+
+        listaManuales.push(orden);
+        document.getElementById('formManual').reset();
+        renderizarTablasManuales();
+        guardarEstado();
+    }
+
+    function renderizarTablasManuales() {
+        const tbody = document.getElementById('tablaManualesRecopilado');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        if (listaManuales.length === 0) {
+            tbody.innerHTML = `<tr id="filaVaciaManual"><td colspan="18" class="text-center text-muted py-4">Ninguna información registrada todavía. Llena el formulario de arriba.</td></tr>`;
+            return;
+        }
+
+        listaManuales.forEach(orden => {
+            const tr = document.createElement('tr');
+            const selectClass = orden.estado === 'Pendiente' ? 'badge-pendiente' : 'badge-cerrado';
+
+            let columnaAccion = '';
+            if (orden.transporte === 'DLD') {
+                columnaAccion = `<span class="badge bg-success px-3 py-1.5 fw-bold text-uppercase">DLD</span>`;
+            } else if (orden.transporte === 'CHARAPE') {
+                columnaAccion = `<span class="badge bg-warning text-dark px-3 py-1.5 fw-bold text-uppercase">CHARAPE</span>`;
+            } else {
+                columnaAccion = `
+                    <div class="d-flex justify-content-center gap-1">
+                        <button class="btn btn-sm btn-success py-0 px-2 fw-bold" style="font-size:0.75rem;" onclick="asignarGlobal('${orden.id}', 'DLD', 'Manual')">DLD</button>
+                        <button class="btn btn-sm btn-warning py-0 px-2 fw-bold" style="font-size:0.75rem; color:#000;" onclick="asignarGlobal('${orden.id}', 'CHARAPE', 'Manual')">CHARAPE</button>
+                    </div>
+                `;
+            }
+
+            tr.innerHTML = `
+                <td class="text-center align-middle">${columnaAccion}</td>
+                <td>${orden.fechaCompra}</td>
+                <td>${orden.gestorSac}</td>
+                <td class="fw-bold text-primary">${orden.notaVenta}</td>
+                <td>${orden.autorizacion}</td>
+                <td>${orden.consultor}</td>
+                <td>${orden.division}</td>
+                <td>${orden.fechaDespacho}</td>
+                <td>${orden.motivo}</td>
+                <td>${orden.cliente}</td>
+                <td>${orden.documento}</td>
+                <td class="fw-bold text-secondary">${orden.distrito}</td>
+                <td>${orden.direccion}</td>
+                <td>${orden.referencia}</td>
+                <td>${orden.celular}</td>
+                <td>${orden.correo}</td>
+                <td class="text-center">
+                    <select class="form-select form-select-sm fw-bold ${selectClass}" style="border:none; cursor:pointer;" onchange="cambiarEstadoManual('${orden.id}', this.value)">
+                        <option value="Pendiente" ${orden.estado === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
+                        <option value="Cerrado" ${orden.estado === 'Cerrado' ? 'selected' : ''}>Cerrado</option>
+                    </select>
+                </td>
+                <td>${orden.observacion}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // CAMBIAR ESTADO DE UNA ORDEN MANUAL DIRECTAMENTE DESDE EL CUADRO
+    function cambiarEstadoManual(id, nuevoEstado) {
+        const idx = listaManuales.findIndex(o => o.id === id);
+        if (idx !== -1) {
+            listaManuales[idx].estado = nuevoEstado;
+            renderizarTablasManuales();
+            guardarEstado();
+        }
+    }
+
+    // CONTROL DE ASIGNACIÓN GLOBAL CENTRALIZADA
+    function asignarGlobal(id, empresa, origen) {
+        if (origen === 'Manual') {
+            const idx = listaManuales.findIndex(o => o.id === id);
+            if (idx !== -1) {
+                listaManuales[idx].transporte = empresa;
+                renderizarTablasManuales();
+                guardarEstado();
+                alert(`Pedido Manual N/V ${listaManuales[idx].notaVenta} asignado a ${empresa}`);
+            }
+        } else if (origen === 'Excel') {
+            const idx = listaPedidosExcel.findIndex(o => o.id === id);
+            if (idx !== -1) {
+                listaPedidosExcel[idx].transporte = empresa;
+                renderizarTablaDetalle();
+                guardarEstado();
+                alert(`Pedido Excel N/V ${listaPedidosExcel[idx].nv} asignado a ${empresa}`);
+            }
+        }
+    }
+
+    // RENDERIZAR TABLA DE DETALLE DE PEDIDOS (CON ENFOQUE COMPACTO Y 12 COLUMNAS MAPEADAS AL HTML)
+    function renderizarTablaDetalle() {
+        const tDetalle = document.getElementById('tablaDetalle');
+        if (!tDetalle) return;
+        tDetalle.innerHTML = '';
+
+        if (listaPedidosExcel.length === 0) {
+            tDetalle.innerHTML = `<tr><td colspan="12" class="text-center text-muted py-4">Sube los archivos para ver la lista de distribución.</td></tr>`;
+            return;
+        }
+
+        listaPedidosExcel.forEach(p => {
+            const tr = document.createElement('tr');
+
+            let columnaAccion = '';
+            if (p.transporte === 'DLD') {
+                columnaAccion = `<span class="badge bg-success px-3 py-1.5 fw-bold text-uppercase">DLD</span>`;
+            } else if (p.transporte === 'CHARAPE') {
+                columnaAccion = `<span class="badge bg-warning text-dark px-3 py-1.5 fw-bold text-uppercase">CHARAPE</span>`;
+            } else {
+                columnaAccion = `
+                    <div class="d-flex justify-content-center gap-1">
+                        <button class="btn btn-sm btn-success py-0 px-2 fw-bold" style="font-size:0.75rem;" onclick="asignarGlobal('${p.id}', 'DLD', 'Excel')">DLD</button>
+                        <button class="btn btn-sm btn-warning py-0 px-2 fw-bold" style="font-size:0.75rem; color:#000;" onclick="asignarGlobal('${p.id}', 'CHARAPE', 'Excel')">CHARAPE</button>
+                    </div>
+                `;
+            }
+
+            // El orden estricto de las 12 celdas que se emparejan con los encabezados del HTML
+            tr.innerHTML = `
+                <td class="text-center align-middle">${columnaAccion}</td>
+                <td class="fw-bold text-primary">${p.nv}</td>
+                <td>${p.sku}</td>
+                <td>${p.producto}</td>
+                <td class="text-center fw-bold">${p.cantidad}</td>
+                <td>${p.cliente}</td>
+                <td class="fw-semibold text-secondary">${p.distrito}</td>
+                <td>${p.referencia}</td>
+                <td class="text-end">${p.peso.toFixed(2)}</td>
+                <td class="text-end text-info fw-bold">${p.volumen.toFixed(4)}</td>
+                <td class="text-muted text-center">${p.fechaOriginal}</td>
+                <td class="fw-bold text-dark text-center">${p.fechaEntrega}</td>
+            `;
+            tDetalle.appendChild(tr);
+        });
+    }
+
+    // RENDERIZAR TRANSPORTES INTEGRADOS
+    function renderizarTransporte(empresa, tablaId, vacioId) {
+        const tbody = document.getElementById(tablaId);
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        const mFiltrados = listaManuales.filter(o => o.transporte === empresa);
+        const eFiltrados = listaPedidosExcel.filter(o => o.transporte === empresa);
+
+        if (mFiltrados.length === 0 && eFiltrados.length === 0) {
+            tbody.innerHTML = `<tr id="${vacioId}"><td colspan="12" class="text-center text-muted py-4">No se han asignado órdenes a este transporte.</td></tr>`;
+            return;
+        }
+
+        // Insertar Manuales
+        mFiltrados.forEach(orden => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="text-center">
+                    <button class="btn btn-sm btn-danger py-0 px-2 small" onclick="liberarGlobal('${orden.id}', 'Manual', '${empresa}')"><i class="bi bi-x-circle me-1"></i>Quitar</button>
+                </td>
+                <td class="text-center"><span class="badge badge-origen-manual">Manual</span></td>
+                <td class="fw-bold text-primary">${orden.notaVenta}</td>
+                <td>-</td>
+                <td class="text-muted">Ruta Manual: ${orden.motivo}</td>
+                <td class="text-center">-</td>
+                <td>${orden.cliente}</td>
+                <td class="fw-bold text-secondary">${orden.distrito}</td>
+                <td>${orden.referencia}</td>
+                <td class="text-end">-</td>
+                <td class="text-end">-</td>
+                <td>${orden.fechaDespacho}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // Insertar Pedidos Excel utilizando ÚNICAMENTE la fechaEntrega reprogramada
+        eFiltrados.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="text-center">
+                    <button class="btn btn-sm btn-danger py-0 px-2 small" onclick="liberarGlobal('${p.id}', 'Excel', '${empresa}')"><i class="bi bi-x-circle me-1"></i>Quitar</button>
+                </td>
+                <td class="text-center"><span class="badge badge-origen-excel">Carga Excel</span></td>
+                <td class="fw-bold text-primary">${p.nv}</td>
+                <td>${p.sku}</td>
+                <td>${p.producto}</td>
+                <td class="text-center fw-bold">${p.cantidad}</td>
+                <td>${p.cliente}</td>
+                <td class="fw-bold text-secondary">${p.distrito}</td>
+                <td>${p.referencia}</td>
+                <td class="text-end fw-bold text-success">${p.peso.toFixed(2)} Kg</td>
+                <td class="text-end fw-bold text-info">${p.volumen.toFixed(4)} m³</td>
+                <td class="fw-bold text-primary text-center">${p.fechaEntrega}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // Fila de totales: suma de Peso Total y Volumen Total de todas las órdenes listadas
+        const totalPeso = eFiltrados.reduce((acc, p) => acc + p.peso, 0);
+        const totalVolumen = eFiltrados.reduce((acc, p) => acc + p.volumen, 0);
+        const trTotal = document.createElement('tr');
+        trTotal.style.backgroundColor = '#eaeff2';
+        trTotal.innerHTML = `
+            <td colspan="9" class="text-end fw-bold text-dark">TOTAL GENERAL</td>
+            <td class="text-end fw-bold text-success">${totalPeso.toFixed(2)} Kg</td>
+            <td class="text-end fw-bold text-info">${totalVolumen.toFixed(4)} m³</td>
+            <td></td>
+        `;
+        tbody.appendChild(trTotal);
+    }
+
+    function liberarGlobal(id, origen, empresa) {
+        if (origen === 'Manual') {
+            const idx = listaManuales.findIndex(o => o.id === id);
+            if (idx !== -1) {
+                listaManuales[idx].transporte = 'Pendiente';
+                renderizarTablasManuales();
+            }
+        } else {
+            const idx = listaPedidosExcel.findIndex(o => o.id === id);
+            if (idx !== -1) {
+                listaPedidosExcel[idx].transporte = 'Pendiente';
+                renderizarTablaDetalle();
+            }
+        }
+        renderizarTransporte(empresa, empresa === 'DLD' ? 'tablaDLD' : 'tablaCHARAPE', empresa === 'DLD' ? 'filaVaciaDLD' : 'filaVaciaCharape');
+        guardarEstado();
+    }
+
+    // EXPORTACIONES A EXCEL
+    function exportarManualesExcel() {
+        try {
+            const pendientes = listaManuales.filter(o => o.transporte === 'Pendiente');
+            if (pendientes.length === 0) { return alert("No hay datos pendientes para exportar."); }
+
+            const datosExport = pendientes.map(o => ({
+                'Fecha Compra': o.fechaCompra || '-',
+                'Gestor SAC': o.gestorSac || '-',
+                'N/V': o.notaVenta || '-',
+                'Autorización': o.autorizacion || '-',
+                'Consultor': o.consultor || '-',
+                'División': o.division || '-',
+                'Fecha Despacho': o.fechaDespacho || '-',
+                'Motivo': o.motivo || '-',
+                'Cliente': o.cliente || '-',
+                'DNI/CE/RUC': o.documento || '-',
+                'Distrito': o.distrito || '-',
+                'Dirección': o.direccion || '-',
+                'Referencia': o.referencia || '-',
+                'Celular': o.celular || '-',
+                'Correo': o.correo || '-',
+                'Estado': o.estado || 'Pendiente',
+                'Observación': o.observacion || '-'
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(datosExport);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Pendientes");
+            XLSX.writeFile(workbook, "Rutas_Manuales_Pendientes.xlsx");
+        } catch (err) {
+            console.error('Error al exportar rutas manuales:', err);
+            alert(`Ocurrió un error al exportar.\n\nDetalle: ${err.message}\n\nAbre la consola del navegador (F12) para más información.`);
+        }
+    }
+
+    function exportarTransporteExcel(empresa) {
+        try {
+            const manuales = listaManuales.filter(o => o.transporte === empresa);
+            const excelData = listaPedidosExcel.filter(o => o.transporte === empresa);
+
+            if (manuales.length === 0 && excelData.length === 0) { return alert(`No hay pedidos asignados a ${empresa} para exportar.`); }
+
+            const consolidadoDescarga = [];
+
+            manuales.forEach(m => {
+                consolidadoDescarga.push({
+                    'Origen': 'Manual',
+                    'N/V': m.notaVenta || '-',
+                    'SKU': '-',
+                    'Descripción': m.motivo || '-',
+                    'Cantidad': '-',
+                    'Cliente': m.cliente || '-',
+                    'Distrito': m.distrito || '-',
+                    'Referencia': m.referencia || '-',
+                    'Peso (Kg)': 0,
+                    'Volumen (m³)': 0,
+                    'Fecha Despacho': m.fechaDespacho || '-'
+                });
+            });
+
+            excelData.forEach(e => {
+                const pesoNum = Number(e.peso) || 0;
+                const volNum = Number(e.volumen) || 0;
+                consolidadoDescarga.push({
+                    'Origen': 'Carga Excel',
+                    'N/V': e.nv || '-',
+                    'SKU': e.sku || '-',
+                    'Descripción': e.producto || '-',
+                    'Cantidad': (e.cantidad !== undefined && e.cantidad !== null) ? e.cantidad : '-',
+                    'Cliente': e.cliente || '-',
+                    'Distrito': e.distrito || '-',
+                    'Referencia': e.referencia || '-',
+                    'Peso (Kg)': Number(pesoNum.toFixed(2)),
+                    'Volumen (m³)': Number(volNum.toFixed(4)),
+                    'Fecha Despacho': e.fechaEntrega || '-'
+                });
+            });
+
+            // Fila de totales al final del Excel exportado
+            const totalPeso = excelData.reduce((acc, e) => acc + (Number(e.peso) || 0), 0);
+            const totalVolumen = excelData.reduce((acc, e) => acc + (Number(e.volumen) || 0), 0);
+            consolidadoDescarga.push({
+                'Origen': '', 'N/V': '', 'SKU': '', 'Descripción': '', 'Cantidad': '',
+                'Cliente': '', 'Distrito': '', 'Referencia': 'TOTAL GENERAL',
+                'Peso (Kg)': Number(totalPeso.toFixed(2)),
+                'Volumen (m³)': Number(totalVolumen.toFixed(4)),
+                'Fecha Despacho': ''
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(consolidadoDescarga);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, `Manifiesto ${empresa}`);
+            XLSX.writeFile(workbook, `Manifiesto_Asignacion_${empresa}.xlsx`);
+        } catch (err) {
+            console.error(`Error al exportar el manifiesto de ${empresa}:`, err);
+            alert(`Ocurrió un error al exportar el manifiesto de ${empresa}.\n\nDetalle: ${err.message}\n\nAbre la consola del navegador (F12) para más información.`);
+        }
+    }
+
+    // CRUCE DE ARCHIVOS AUTOMÁTICO
     function limpiarNumero(valor) {
         if (valor === undefined || valor === null || valor === '') return 0;
         let num = parseFloat(String(valor).replace(/[^0-9.-]/g, ''));
         return isNaN(num) ? 0 : num;
     }
 
+    // Búsqueda inteligente de columnas sin importar espacios o variaciones de caja
+    function obtenerValorColumna(fila, fragmentoBuscado) {
+        const lowerBuscado = fragmentoBuscado.toLowerCase().replace(/\s+/g, '');
+        for (let key in fila) {
+            if (key.toLowerCase().replace(/\s+/g, '').includes(lowerBuscado)) {
+                return fila[key];
+            }
+        }
+        return null;
+    }
+
     function leerArchivo(fileId, callback) {
         const fileInput = document.getElementById(fileId);
-        if (!fileInput.files.length) {
-            callback(null);
-            return;
-        }
+        if (!fileInput || !fileInput.files.length) { callback(null); return; }
         const file = fileInput.files[0];
         const reader = new FileReader();
         reader.onload = function(e) {
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
-            const firstSheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheetName];
-            callback(XLSX.utils.sheet_to_json(worksheet));
+            callback(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]));
         };
         reader.readAsArrayBuffer(file);
     }
@@ -255,11 +796,7 @@
             dataDespacho = resDespacho;
             leerArchivo('fileSku', function(resSku) {
                 dataSku = resSku;
-
-                if (!dataDespacho || !dataSku) {
-                    alert("Por favor, sube ambos archivos antes de hacer clic en procesar.");
-                    return;
-                }
+                if (!dataDespacho || !dataSku) { return alert("Por favor, asegúrate de haber cargado ambos archivos Excel."); }
                 ejecutarCruce();
             });
         });
@@ -267,48 +804,84 @@
 
     function ejecutarCruce() {
         const resumenRutas = {};
-        const detallePedidos = [];
+        listaPedidosExcel = [];
 
-        dataDespacho.forEach(fila => {
+        dataDespacho.forEach((fila, index) => {
             const nv = String(fila['Código de N/V'] || '').trim();
             const sku = String(fila['SKU'] || '').trim();
-            const zona = fila['Zona de entrega'] || fila['Ruta'] || 'Sin Zona';
             const cliente = fila['Nombre de cliente'] || 'Cliente';
             const distrito = fila['Distrito'] || 'No Especificado';
             const direccion = fila['Dirección de entrega'] || 'Sin Dirección';
+            const referencia = obtenerValorColumna(fila, 'referencia') || '-';
             const producto = fila['Descripción'] || '';
+
+            // --- AJUSTE DE LIMPIEZA DE ZONA COMPUESTA ---
+            let zona = String(fila['Zona de entrega'] || fila['Ruta'] || 'Sin Zona').trim();
+            if (zona.includes(' - ')) {
+                const partes = zona.split(' - ');
+                zona = partes[partes.length - 1].trim();
+            }
+            // --------------------------------------------
+
+            // EXTRACCIÓN FLEXIBLE DE FECHAS (Soporta: "Fecha original de entrega" y cualquier variante de "Fecha de entrega")
+            const fOriginal = obtenerValorColumna(fila, 'original') || '-';
+
+            // Busca primero la columna de reprogramación específica; si no la halla, usa la original
+            let fEntrega = obtenerValorColumna(fila, 'fecha de entrega') || obtenerValorColumna(fila, 'fecha entrega');
+            if (!fEntrega || String(fEntrega).trim() === '' || String(fEntrega).trim() === '-') {
+                fEntrega = fOriginal;
+            }
 
             const cantidad = limpiarNumero(fila['Cantidad total'] || fila['Cantidad']);
             const pesoUnitario = limpiarNumero(fila['Peso de producto'] || fila['Peso']);
             let volumenUnitario = limpiarNumero(fila['Volumen de producto'] || fila['Volumen']);
 
-            if (volumenUnitario === 0 && pesoUnitario > 0) {
-                volumenUnitario = pesoUnitario * 0.00125;
-            }
+            if (volumenUnitario === 0 && pesoUnitario > 0) { volumenUnitario = pesoUnitario * 0.00125; }
 
             const pesoTotal = pesoUnitario * cantidad;
             const volumenTotal = volumenUnitario * cantidad;
 
-            if (!resumenRutas[zona]) {
-                resumenRutas[zona] = { pedidos: new Set(), weight: 0, volume: 0 };
-            }
+            if (!resumenRutas[zona]) { resumenRutas[zona] = { pedidos: new Set(), weight: 0, volume: 0 }; }
             resumenRutas[zona].pedidos.add(nv);
             resumenRutas[zona].weight += pesoTotal;
             resumenRutas[zona].volume += volumenTotal;
 
-            detallePedidos.push({
+            listaPedidosExcel.push({
+                id: 'E-' + index + '-' + nv,
+                transporte: 'Pendiente',
                 nv: nv, sku: sku, cliente: cliente, distrito: distrito, direccion: direccion,
-                producto: producto, cantidad: cantidad, peso: pesoTotal,
-                volumen: volumenTotal
+                referencia: referencia, zona: zona,
+                producto: producto, cantidad: cantidad, peso: pesoTotal, volumen: volumenTotal,
+                fechaOriginal: fOriginal,
+                fechaEntrega: fEntrega
             });
         });
 
-        mostrarResultados(resumenRutas, detallePedidos);
+        renderizarResumenZonas();
+        renderizarTablaDetalle();
+        guardarEstado();
         cambiarSeccion('zonas');
     }
 
-    function mostrarResultados(resumenRutas, detallePedidos) {
+    // RENDERIZAR RESUMEN DE ZONAS A PARTIR DE listaPedidosExcel (permite reconstruirlo tras recargar la página)
+    function renderizarResumenZonas() {
         const tRutas = document.getElementById('tablaRutas');
+        if (!tRutas) return;
+
+        if (listaPedidosExcel.length === 0) {
+            tRutas.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-4">Sube los archivos para generar el resumen.</td></tr>`;
+            return;
+        }
+
+        const resumenRutas = {};
+        listaPedidosExcel.forEach(p => {
+            const z = p.zona || 'Sin Zona';
+            if (!resumenRutas[z]) { resumenRutas[z] = { pedidos: new Set(), weight: 0, volume: 0 }; }
+            resumenRutas[z].pedidos.add(p.nv);
+            resumenRutas[z].weight += p.peso;
+            resumenRutas[z].volume += p.volumen;
+        });
+
         tRutas.innerHTML = '';
         for (const z in resumenRutas) {
             const tr = document.createElement('tr');
@@ -320,25 +893,118 @@
             `;
             tRutas.appendChild(tr);
         }
-
-        const tDetalle = document.getElementById('tablaDetalle');
-        tDetalle.innerHTML = '';
-        detallePedidos.forEach(p => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="fw-bold text-primary">${p.nv}</td>
-                <td>${p.sku}</td>
-                <td>${p.cliente}</td>
-                <td class="fw-semibold text-secondary">${p.distrito}</td>
-                <td>${p.direccion}</td>
-                <td>${p.producto}</td>
-                <td class="text-center fw-bold">${p.cantidad}</td>
-                <td class="text-end">${p.peso.toFixed(2)}</td>
-                <td class="text-end text-info fw-bold">${p.volumen.toFixed(4)}</td>
-            `;
-            tDetalle.appendChild(tr);
-        });
     }
+
+    // PERSISTENCIA Y SINCRONIZACIÓN EN TIEMPO REAL (Firebase Realtime Database)
+    // Todo lo de Firebase está protegido con try/catch: si la nube falla por cualquier
+    // motivo (sin internet, bloqueo del navegador, error de configuración), el sistema
+    // debe seguir funcionando con normalidad de forma local (cargar Excel, cruzar, asignar, etc).
+    let firebaseListo = false;
+    let db, estadoRef;
+
+    try {
+        const firebaseConfig = {
+            apiKey: "AIzaSyClUsrjaI5FmjC9nybhWfAWXLCBXYkpGGU",
+            authDomain: "promart-despacho-tarapoto.firebaseapp.com",
+            databaseURL: "https://promart-despacho-tarapoto-default-rtdb.firebaseio.com",
+            projectId: "promart-despacho-tarapoto",
+            storageBucket: "promart-despacho-tarapoto.firebasestorage.app",
+            messagingSenderId: "141036062985",
+            appId: "1:141036062985:web:84cc359a808a342f2fabd8"
+        };
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.database();
+        estadoRef = db.ref('despacho/estadoGlobal');
+        firebaseListo = true;
+    } catch (errInit) {
+        console.error('No se pudo inicializar Firebase (la app seguirá funcionando localmente):', errInit);
+        firebaseListo = false;
+    }
+
+    function actualizarIndicadorConexion(estado) {
+        const el = document.getElementById('estadoConexion');
+        if (!el) return;
+        if (estado === 'conectado') {
+            el.className = 'small fw-bold text-success';
+            el.innerHTML = '<i class="bi bi-cloud-check-fill me-1"></i>Sincronizado en línea';
+        } else if (estado === 'error') {
+            el.className = 'small fw-bold text-danger';
+            el.innerHTML = '<i class="bi bi-cloud-slash-fill me-1"></i>Sin conexión a la nube (trabajando localmente)';
+        } else {
+            el.className = 'small fw-bold text-warning';
+            el.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Conectando...';
+        }
+    }
+
+    // Guarda el estado completo (manuales + pedidos de Excel) en Realtime Database.
+    // Si la nube falla, no interrumpe el flujo local: solo avisa con el indicador.
+    function guardarEstado() {
+        if (!firebaseListo) { actualizarIndicadorConexion('error'); return; }
+        try {
+            estadoRef.set({
+                listaManuales: listaManuales,
+                listaPedidosExcel: listaPedidosExcel,
+                actualizado: firebase.database.ServerValue.TIMESTAMP
+            }).catch(err => {
+                console.error('No se pudo guardar en Firebase:', err);
+                actualizarIndicadorConexion('error');
+            });
+        } catch (err) {
+            console.error('Error al guardar en Firebase:', err);
+            actualizarIndicadorConexion('error');
+        }
+    }
+
+    // Escucha cambios en tiempo real: se ejecuta al cargar la página Y cada vez que
+    // cualquier computadora conectada modifica los datos.
+    function iniciarSincronizacion() {
+        if (!firebaseListo) { actualizarIndicadorConexion('error'); return; }
+        try {
+            estadoRef.on('value', snapshot => {
+                const data = snapshot.val() || {};
+                listaManuales = data.listaManuales || [];
+                listaPedidosExcel = data.listaPedidosExcel || [];
+
+                renderizarTablasManuales();
+                renderizarTablaDetalle();
+                renderizarResumenZonas();
+                renderizarTransporte('DLD', 'tablaDLD', 'filaVaciaDLD');
+                renderizarTransporte('CHARAPE', 'tablaCHARAPE', 'filaVaciaCharape');
+
+                actualizarIndicadorConexion('conectado');
+            }, err => {
+                console.error('Error de sincronización con Firebase:', err);
+                actualizarIndicadorConexion('error');
+            });
+        } catch (err) {
+            console.error('No se pudo iniciar la sincronización:', err);
+            actualizarIndicadorConexion('error');
+        }
+    }
+
+    // REINICIAR SISTEMA: borra todo lo guardado en la nube (afecta a TODAS las computadoras conectadas)
+    function resetSistema() {
+        const confirmar = confirm('¿Seguro que deseas reiniciar el sistema? Esto borrará TODA la información en la nube (pedidos de Excel, rutas manuales y asignaciones) para TODAS las computadoras conectadas.');
+        if (!confirmar) return;
+
+        if (!firebaseListo) {
+            listaManuales = [];
+            listaPedidosExcel = [];
+            location.reload();
+            return;
+        }
+        estadoRef.set({ listaManuales: [], listaPedidosExcel: [] })
+            .then(() => location.reload())
+            .catch(err => {
+                console.error('No se pudo reiniciar:', err);
+                alert('No se pudo reiniciar en la nube. Verifica tu conexión a internet.');
+            });
+    }
+
+    // AL CARGAR LA PÁGINA: conectarse a Firebase y suscribirse a cambios en tiempo real
+    document.addEventListener('DOMContentLoaded', function () {
+        iniciarSincronizacion();
+    });
 </script>
 </body>
 </html>
