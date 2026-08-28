@@ -32,10 +32,19 @@
 
         /* Diseños de Tablas y Tarjetas */
         .card { border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.05); border-radius: 10px; margin-bottom: 25px; }
-        .table-responsive-container { max-height: 430px; overflow-y: auto; border-radius: 8px; border: 1px solid #dee2e6; }
+        .table-responsive-container { max-height: 430px; overflow-y: auto; border-radius: 8px; border: 2px solid #34495e; }
+
+        /* BORDES MÁS NEGROS/MARCADOS */
+        .table-bordered { border: 1px solid #b2bec3 !important; }
+        .table-bordered th, .table-bordered td { border: 1px solid #b2bec3 !important; }
+
         th { position: sticky; top: 0; background-color: #34495e !important; color: white; z-index: 5; white-space: nowrap; font-size: 0.85rem; }
         td { white-space: nowrap; font-size: 0.85rem; }
         .step-num { width: 28px; height: 28px; background: #0d6efd; color: white; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; margin-right: 10px; }
+
+        /* EFECTO DE FILA SELECCIONADA / ACTIVA */
+        .table-hover tbody tr:hover { background-color: #e3f2fd !important; cursor: pointer; }
+        tr.fila-seleccionada { background-color: #cce5ff !important; font-weight: 500; border-left: 4px solid #0d6efd !important; }
 
         /* Estilos específicos para badges de estado, origen y entidad */
         .badge-pendiente { background-color: #f1c40f; color: #000; }
@@ -109,7 +118,7 @@
                 <div class="card p-4">
                     <h4 class="text-dark mb-3 fw-bold">📦 Resumen de Carga Total por Zona de Entrega</h4>
                     <div class="table-responsive-container">
-                        <table class="table table-striped table-hover align-middle m-0">
+                        <table class="table table-bordered table-striped table-hover align-middle m-0">
                             <thead>
                             <tr>
                                 <th>Ruta / Zona de Entrega</th>
@@ -277,7 +286,7 @@
                                 <th>Autorización</th>
                                 <th>Consultor</th>
                                 <th>División</th>
-                                <th>Fecha Despacho</th>
+                                <th>Fecha Despacho <i class="bi bi-sort-down ms-1 text-warning"></i></th>
                                 <th>Motivo</th>
                                 <th>SKUs</th>
                                 <th>Descripción Productos</th>
@@ -427,6 +436,11 @@
             document.getElementById('page-title').innerText = 'Transporte CHARAPE';
             renderizarTransporte('CHARAPE', 'tablaCHARAPE', 'filaVaciaCharape');
         }
+    }
+
+    function seleccionarFila(tr) {
+        document.querySelectorAll('tr.fila-seleccionada').forEach(r => r.classList.remove('fila-seleccionada'));
+        tr.classList.add('fila-seleccionada');
     }
 
     function obtenerBadgeEntidad(entidad) {
@@ -625,8 +639,13 @@
             return;
         }
 
+        // ORDENAMIENTO AUTOMÁTICO: De mayor a menor por Fecha Despacho
+        listaManuales.sort((a, b) => new Date(b.fechaDespacho) - new Date(a.fechaDespacho));
+
         listaManuales.forEach(orden => {
             const tr = document.createElement('tr');
+            tr.onclick = function() { seleccionarFila(this); };
+
             const selectClass = orden.estado === 'Pendiente' ? 'badge-pendiente' : 'badge-cerrado';
 
             let columnaAccion = '';
@@ -635,10 +654,15 @@
             } else if (orden.transporte === 'CHARAPE') {
                 columnaAccion = `<span class="badge bg-warning text-dark px-3 py-1.5 fw-bold text-uppercase">CHARAPE</span>`;
             } else {
+                // DESACTIVAR ASIGNACIÓN SI EL ESTADO ES "CERRADO"
+                const esCerrado = orden.estado === 'Cerrado';
+                const disabledAttr = esCerrado ? 'disabled' : '';
+                const opacityStyle = esCerrado ? 'opacity: 0.5; cursor: not-allowed;' : '';
+
                 columnaAccion = `
                     <div class="d-flex justify-content-center gap-1">
-                        <button class="btn btn-sm btn-success py-0 px-2 fw-bold" style="font-size:0.75rem;" onclick="asignarGlobal('${orden.id}', 'DLD', 'Manual')">DLD</button>
-                        <button class="btn btn-sm btn-warning py-0 px-2 fw-bold" style="font-size:0.75rem; color:#000;" onclick="asignarGlobal('${orden.id}', 'CHARAPE', 'Manual')">CHARAPE</button>
+                        <button class="btn btn-sm btn-success py-0 px-2 fw-bold" style="font-size:0.75rem; ${opacityStyle}" ${disabledAttr} onclick="asignarGlobal('${orden.id}', 'DLD', 'Manual')">DLD</button>
+                        <button class="btn btn-sm btn-warning py-0 px-2 fw-bold" style="font-size:0.75rem; color:#000; ${opacityStyle}" ${disabledAttr} onclick="asignarGlobal('${orden.id}', 'CHARAPE', 'Manual')">CHARAPE</button>
                     </div>
                 `;
             }
@@ -667,7 +691,7 @@
                 <td>${orden.autorizacion}</td>
                 <td>${orden.consultor}</td>
                 <td>${orden.division}</td>
-                <td>${orden.fechaDespacho}</td>
+                <td class="fw-bold text-dark">${orden.fechaDespacho}</td>
                 <td>${orden.motivo}</td>
                 <td>${skusHTML}</td>
                 <td>${descsHTML}</td>
@@ -732,6 +756,7 @@
 
         listaPedidosExcel.forEach(p => {
             const tr = document.createElement('tr');
+            tr.onclick = function() { seleccionarFila(this); };
 
             let columnaAccion = '';
             if (p.transporte === 'DLD') {
@@ -805,9 +830,14 @@
             return;
         }
 
-        // Insertar Manuales (sin Entidad Venta)
+        // Ordenar Manuales de mayor a menor por fecha en la vista de transporte
+        mFiltrados.sort((a, b) => new Date(b.fechaDespacho) - new Date(a.fechaDespacho));
+
+        // Insertar Manuales
         mFiltrados.forEach(orden => {
             const tr = document.createElement('tr');
+            tr.onclick = function() { seleccionarFila(this); };
+
             const prods = orden.productos || [{ sku: orden.sku || '-', descripcion: orden.producto || '-', cantidad: orden.cantidad || 0 }];
 
             const skusHTML = prods.map(p => `<div>${p.sku}</div>`).join('');
@@ -829,7 +859,7 @@
                 <td>${orden.referencia}</td>
                 <td class="text-end">-</td>
                 <td class="text-end">-</td>
-                <td>${orden.fechaDespacho}</td>
+                <td class="fw-bold text-dark text-center">${orden.fechaDespacho}</td>
             `;
             tbody.appendChild(tr);
         });
@@ -837,6 +867,8 @@
         // Insertar Pedidos Excel
         eFiltrados.forEach(p => {
             const tr = document.createElement('tr');
+            tr.onclick = function() { seleccionarFila(this); };
+
             tr.innerHTML = `
                 <td class="text-center">
                     <button class="btn btn-sm btn-danger py-0 px-2 small" onclick="liberarGlobal('${p.id}', 'Excel', '${empresa}')"><i class="bi bi-x-circle me-1"></i>Quitar</button>
@@ -1044,7 +1076,6 @@
             const referencia = fila['Referencia'] || fila['referencia'] || '-';
             const producto = fila['Descripción'] || '';
 
-            // Extracción directa y precisa de la Entidad de Venta
             let entidadVenta = String(fila['Entidad de venta'] || fila['Entidad de Venta'] || '-').trim();
 
             let zona = String(fila['Zona de entrega'] || fila['Zona de despacho'] || fila['Ruta'] || 'Sin Zona').trim();
@@ -1112,6 +1143,8 @@
         tRutas.innerHTML = '';
         for (const z in resumenRutas) {
             const tr = document.createElement('tr');
+            tr.onclick = function() { seleccionarFila(this); };
+
             tr.innerHTML = `
                 <td class="fw-bold text-dark"><i class="bi bi-pin-map-fill text-danger me-2"></i>${z}</td>
                 <td class="text-center fw-bold text-primary">${resumenRutas[z].pedidos.size}</td>
