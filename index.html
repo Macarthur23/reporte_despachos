@@ -1096,7 +1096,15 @@
             const producto = fila['Descripción'] || '';
 
             let entidadVenta = String(fila['Entidad de venta'] || fila['Entidad de Venta'] || '-').trim();
-            let entidadOrigen = String(fila['Entidad Origen de stock'] || fila['Entidad origen de stock'] || fila['Entidad Origen Stock'] || '-').trim();
+
+            // LECTURA EXACTA Y FLEXIBLE DE ENTIDAD ORIGEN
+            let entidadOrigen = String(
+                fila['Entidad de origen stock'] ||
+                fila['Entidad de origen de stock'] ||
+                fila['Entidad Origen de stock'] ||
+                fila['Entidad origen stock'] ||
+                '-'
+            ).trim();
 
             let zona = String(fila['Zona de entrega'] || fila['Zona de despacho'] || fila['Ruta'] || 'Sin Zona').trim();
             if (zona.includes(' - ')) {
