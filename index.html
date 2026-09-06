@@ -150,6 +150,7 @@
                                 <th class="text-center text-white" style="background-color: #2c3e50 !important;">Asignar Transporte</th>
                                 <th>Código N/V</th>
                                 <th class="text-center">Entidad Venta</th>
+                                <th class="text-center">Entidad Origen</th>
                                 <th>SKU</th>
                                 <th>Descripción Producto</th>
                                 <th class="text-center">Cantidad</th>
@@ -163,7 +164,7 @@
                             </tr>
                             </thead>
                             <tbody id="tablaDetalle">
-                            <tr><td colspan="13" class="text-center text-muted py-4">Sube los archivos para ver la lista de distribución.</td></tr>
+                            <tr><td colspan="14" class="text-center text-muted py-4">Sube los archivos para ver la lista de distribución.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -326,6 +327,7 @@
                                 <th class="text-center">Origen</th>
                                 <th>N/V</th>
                                 <th class="text-center">Entidad Venta</th>
+                                <th class="text-center">Entidad Origen</th>
                                 <th>SKU</th>
                                 <th>Descripción Producto</th>
                                 <th class="text-center">Cantidad</th>
@@ -338,7 +340,7 @@
                             </tr>
                             </thead>
                             <tbody id="tablaDLD">
-                            <tr id="filaVaciaDLD"><td colspan="13" class="text-center text-muted py-4">No se han asignado órdenes a este transporte.</td></tr>
+                            <tr id="filaVaciaDLD"><td colspan="14" class="text-center text-muted py-4">No se han asignado órdenes a este transporte.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -361,6 +363,7 @@
                                 <th class="text-center">Origen</th>
                                 <th>N/V</th>
                                 <th class="text-center">Entidad Venta</th>
+                                <th class="text-center">Entidad Origen</th>
                                 <th>SKU</th>
                                 <th>Descripción Producto</th>
                                 <th class="text-center">Cantidad</th>
@@ -373,7 +376,7 @@
                             </tr>
                             </thead>
                             <tbody id="tablaCHARAPE">
-                            <tr id="filaVaciaCharape"><td colspan="13" class="text-center text-muted py-4">No se han asignado órdenes a este transporte.</td></tr>
+                            <tr id="filaVaciaCharape"><td colspan="14" class="text-center text-muted py-4">No se han asignado órdenes a este transporte.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -639,7 +642,6 @@
             return;
         }
 
-        // ORDENAMIENTO AUTOMÁTICO: De mayor a menor por Fecha Despacho
         listaManuales.sort((a, b) => new Date(b.fechaDespacho) - new Date(a.fechaDespacho));
 
         listaManuales.forEach(orden => {
@@ -654,7 +656,6 @@
             } else if (orden.transporte === 'CHARAPE') {
                 columnaAccion = `<span class="badge bg-warning text-dark px-3 py-1.5 fw-bold text-uppercase">CHARAPE</span>`;
             } else {
-                // DESACTIVAR ASIGNACIÓN SI EL ESTADO ES "CERRADO"
                 const esCerrado = orden.estado === 'Cerrado';
                 const disabledAttr = esCerrado ? 'disabled' : '';
                 const opacityStyle = esCerrado ? 'opacity: 0.5; cursor: not-allowed;' : '';
@@ -724,6 +725,7 @@
         }
     }
 
+    /* ASIGNACIÓN GLOBAL MASIVA POR CÓDIGO N/V */
     function asignarGlobal(id, empresa, origen) {
         if (origen === 'Manual') {
             const idx = listaManuales.findIndex(o => o.id === id);
@@ -734,14 +736,45 @@
                 alert(`Pedido Manual N/V ${listaManuales[idx].notaVenta} asignado a ${empresa}`);
             }
         } else if (origen === 'Excel') {
-            const idx = listaPedidosExcel.findIndex(o => o.id === id);
-            if (idx !== -1) {
-                listaPedidosExcel[idx].transporte = empresa;
+            const pedido = listaPedidosExcel.find(o => o.id === id);
+            if (pedido) {
+                const targetNv = pedido.nv;
+                let cont = 0;
+                listaPedidosExcel.forEach(item => {
+                    if (item.nv === targetNv) {
+                        item.transporte = empresa;
+                        cont++;
+                    }
+                });
                 renderizarTablaDetalle();
                 guardarEstado();
-                alert(`Pedido Excel N/V ${listaPedidosExcel[idx].nv} asignado a ${empresa}`);
+                alert(`N/V ${targetNv} (${cont} SKUs) asignada a ${empresa}`);
             }
         }
+    }
+
+    /* LIBERACIÓN GLOBAL MASIVA POR CÓDIGO N/V */
+    function liberarGlobal(id, origen, empresa) {
+        if (origen === 'Manual') {
+            const idx = listaManuales.findIndex(o => o.id === id);
+            if (idx !== -1) {
+                listaManuales[idx].transporte = 'Pendiente';
+                renderizarTablasManuales();
+            }
+        } else {
+            const pedido = listaPedidosExcel.find(o => o.id === id);
+            if (pedido) {
+                const targetNv = pedido.nv;
+                listaPedidosExcel.forEach(item => {
+                    if (item.nv === targetNv) {
+                        item.transporte = 'Pendiente';
+                    }
+                });
+                renderizarTablaDetalle();
+            }
+        }
+        renderizarTransporte(empresa, empresa === 'DLD' ? 'tablaDLD' : 'tablaCHARAPE', empresa === 'DLD' ? 'filaVaciaDLD' : 'filaVaciaCharape');
+        guardarEstado();
     }
 
     function renderizarTablaDetalle() {
@@ -750,7 +783,7 @@
         tDetalle.innerHTML = '';
 
         if (listaPedidosExcel.length === 0) {
-            tDetalle.innerHTML = `<tr><td colspan="13" class="text-center text-muted py-4">Sube los archivos para ver la lista de distribución.</td></tr>`;
+            tDetalle.innerHTML = `<tr><td colspan="14" class="text-center text-muted py-4">Sube los archivos para ver la lista de distribución.</td></tr>`;
             return;
         }
 
@@ -776,6 +809,7 @@
                 <td class="text-center align-middle">${columnaAccion}</td>
                 <td class="fw-bold text-primary">${p.nv}</td>
                 <td class="text-center">${obtenerBadgeEntidad(p.entidadVenta)}</td>
+                <td class="text-center">${obtenerBadgeEntidad(p.entidadOrigen)}</td>
                 <td>${p.sku}</td>
                 <td>${p.producto}</td>
                 <td class="text-center fw-bold">${p.cantidad}</td>
@@ -826,11 +860,10 @@
         const eFiltrados = listaPedidosExcel.filter(o => o.transporte === empresa);
 
         if (mFiltrados.length === 0 && eFiltrados.length === 0) {
-            tbody.innerHTML = `<tr id="${vacioId}"><td colspan="13" class="text-center text-muted py-4">No se han asignado órdenes a este transporte.</td></tr>`;
+            tbody.innerHTML = `<tr id="${vacioId}"><td colspan="14" class="text-center text-muted py-4">No se han asignado órdenes a este transporte.</td></tr>`;
             return;
         }
 
-        // Ordenar Manuales de mayor a menor por fecha en la vista de transporte
         mFiltrados.sort((a, b) => new Date(b.fechaDespacho) - new Date(a.fechaDespacho));
 
         // Insertar Manuales
@@ -850,6 +883,7 @@
                 </td>
                 <td class="text-center"><span class="badge badge-origen-manual">Manual</span></td>
                 <td class="fw-bold text-primary">${orden.notaVenta}</td>
+                <td class="text-center"><span class="badge bg-secondary">Manual</span></td>
                 <td class="text-center"><span class="badge bg-secondary">Manual</span></td>
                 <td>${skusHTML}</td>
                 <td class="text-muted">${descsHTML}</td>
@@ -871,11 +905,12 @@
 
             tr.innerHTML = `
                 <td class="text-center">
-                    <button class="btn btn-sm btn-danger py-0 px-2 small" onclick="liberarGlobal('${p.id}', 'Excel', '${empresa}')"><i class="bi bi-x-circle me-1"></i>Quitar</button>
+                    <button class="btn btn-sm btn-danger py-0 px-2 small" onclick="liberarGlobal('${p.id}', 'Excel', '${empresa}')"><i class="bi bi-x-circle me-1"></i>Quitar N/V</button>
                 </td>
                 <td class="text-center"><span class="badge badge-origen-excel">Carga Excel</span></td>
                 <td class="fw-bold text-primary">${p.nv}</td>
                 <td class="text-center">${obtenerBadgeEntidad(p.entidadVenta)}</td>
+                <td class="text-center">${obtenerBadgeEntidad(p.entidadOrigen)}</td>
                 <td>${p.sku}</td>
                 <td>${p.producto}</td>
                 <td class="text-center fw-bold">${p.cantidad}</td>
@@ -895,30 +930,12 @@
         const trTotal = document.createElement('tr');
         trTotal.style.backgroundColor = '#eaeff2';
         trTotal.innerHTML = `
-            <td colspan="10" class="text-end fw-bold text-dark">TOTAL GENERAL</td>
+            <td colspan="11" class="text-end fw-bold text-dark">TOTAL GENERAL</td>
             <td class="text-end fw-bold text-success">${totalPeso.toFixed(2)} Kg</td>
             <td class="text-end fw-bold text-info">${totalVolumen.toFixed(4)} m³</td>
             <td></td>
         `;
         tbody.appendChild(trTotal);
-    }
-
-    function liberarGlobal(id, origen, empresa) {
-        if (origen === 'Manual') {
-            const idx = listaManuales.findIndex(o => o.id === id);
-            if (idx !== -1) {
-                listaManuales[idx].transporte = 'Pendiente';
-                renderizarTablasManuales();
-            }
-        } else {
-            const idx = listaPedidosExcel.findIndex(o => o.id === id);
-            if (idx !== -1) {
-                listaPedidosExcel[idx].transporte = 'Pendiente';
-                renderizarTablaDetalle();
-            }
-        }
-        renderizarTransporte(empresa, empresa === 'DLD' ? 'tablaDLD' : 'tablaCHARAPE', empresa === 'DLD' ? 'filaVaciaDLD' : 'filaVaciaCharape');
-        guardarEstado();
     }
 
     function exportarManualesExcel() {
@@ -981,6 +998,7 @@
                         'Origen': 'Manual',
                         'N/V': m.notaVenta || '-',
                         'Entidad Venta': 'Manual',
+                        'Entidad Origen': 'Manual',
                         'SKU': p.sku || '-',
                         'Descripción': p.descripcion || (m.motivo || '-'),
                         'Cantidad': p.cantidad || '-',
@@ -1001,6 +1019,7 @@
                     'Origen': 'Carga Excel',
                     'N/V': e.nv || '-',
                     'Entidad Venta': e.entidadVenta || '-',
+                    'Entidad Origen': e.entidadOrigen || '-',
                     'SKU': e.sku || '-',
                     'Descripción': e.producto || '-',
                     'Cantidad': (e.cantidad !== undefined && e.cantidad !== null) ? e.cantidad : '-',
@@ -1016,7 +1035,7 @@
             const totalPeso = excelData.reduce((acc, e) => acc + (Number(e.peso) || 0), 0);
             const totalVolumen = excelData.reduce((acc, e) => acc + (Number(e.volumen) || 0), 0);
             consolidadoDescarga.push({
-                'Origen': '', 'N/V': '', 'Entidad Venta': '', 'SKU': '', 'Descripción': '', 'Cantidad': '',
+                'Origen': '', 'N/V': '', 'Entidad Venta': '', 'Entidad Origen': '', 'SKU': '', 'Descripción': '', 'Cantidad': '',
                 'Cliente': '', 'Distrito': '', 'Referencia': 'TOTAL GENERAL',
                 'Peso (Kg)': Number(totalPeso.toFixed(2)),
                 'Volumen (m³)': Number(totalVolumen.toFixed(4)),
@@ -1077,6 +1096,7 @@
             const producto = fila['Descripción'] || '';
 
             let entidadVenta = String(fila['Entidad de venta'] || fila['Entidad de Venta'] || '-').trim();
+            let entidadOrigen = String(fila['Entidad Origen de stock'] || fila['Entidad origen de stock'] || fila['Entidad Origen Stock'] || '-').trim();
 
             let zona = String(fila['Zona de entrega'] || fila['Zona de despacho'] || fila['Ruta'] || 'Sin Zona').trim();
             if (zona.includes(' - ')) {
@@ -1110,6 +1130,7 @@
                 transporte: 'Pendiente',
                 nv: nv, sku: sku, cliente: cliente, distrito: distrito, direccion: direccion,
                 referencia: referencia, zona: zona, entidadVenta: entidadVenta,
+                entidadOrigen: entidadOrigen,
                 producto: producto, cantidad: cantidad, peso: pesoTotal, volumen: volumenTotal,
                 fechaOriginal: fOriginal,
                 fechaEntrega: fEntrega
